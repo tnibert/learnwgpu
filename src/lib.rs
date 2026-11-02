@@ -5,10 +5,44 @@ use winit::{
     window::WindowBuilder,
     window::Window,
 };
+use wgpu::util::DeviceExt;
 
 #[cfg(target_arch="wasm32")]
 use wasm_bindgen::prelude::*;
 
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct Vertex {
+    position: [f32; 3],
+    color: [f32; 3],
+}
+
+impl Vertex {
+    fn desc() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x3,
+                }
+            ]
+        }
+    }
+}
+
+const VERTICES: &[Vertex] = &[
+    Vertex { position: [0.0, 0.5, 0.0], color: [1.0, 0.0, 0.0] },
+    Vertex { position: [-0.5, -0.5, 0.0], color: [0.0, 1.0, 0.0] },
+    Vertex { position: [0.5, -0.5, 0.0], color: [0.0, 0.0, 1.0] },
+];
 
 struct State<'a> {
     surface: wgpu::Surface<'a>,
@@ -17,7 +51,9 @@ struct State<'a> {
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
     render_pipeline: wgpu::RenderPipeline,
+    vertex_buffer: wgpu::Buffer,
     clear_color: wgpu::Color,
+    num_vertices: u32,
     // The window must be declared after the surface so
     // it gets dropped after it as the surface contains
     // unsafe references to the window's resources.
@@ -27,6 +63,7 @@ struct State<'a> {
 impl<'a> State<'a> {
     // Creating some of the wgpu types requires async code
     async fn new(window: &'a Window) -> State<'a> {
+        let num_vertices = VERTICES.len() as u32;
         let size = window.inner_size();
 
         // The instance is a handle to our GPU
@@ -64,6 +101,14 @@ impl<'a> State<'a> {
             },
             None, // Trace path
         ).await.unwrap();
+
+        let vertex_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(VERTICES),
+                usage: wgpu::BufferUsages::VERTEX,
+            }
+        );
 
         let surface_caps = surface.get_capabilities(&adapter);
         // Shader code in this tutorial assumes an sRGB surface texture. Using a different
@@ -107,7 +152,9 @@ impl<'a> State<'a> {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
-                buffers: &[],
+                buffers: &[
+                    Vertex::desc(),
+                ],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -151,6 +198,8 @@ impl<'a> State<'a> {
             clear_color,
             size,
             render_pipeline,
+            vertex_buffer,
+            num_vertices,
         }
     }
 
@@ -213,7 +262,8 @@ impl<'a> State<'a> {
             });
 
             render_pass.set_pipeline(&self.render_pipeline); // 2.
-            render_pass.draw(0..3, 0..1); // 3.
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.draw(0..self.num_vertices, 0..1); // 3.
         }
     
         // submit will accept anything that implements IntoIter
