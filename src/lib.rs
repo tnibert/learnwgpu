@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use winit::{
         application::ApplicationHandler,
+        dpi::PhysicalPosition,
         event::*,
         event_loop::{ActiveEventLoop, EventLoop},
         keyboard::{KeyCode, PhysicalKey},
@@ -124,6 +125,7 @@ impl ApplicationHandler<State> for App {
                     },
                 ..
             } => state.handle_key(event_loop, code, key_state.is_pressed()),
+            WindowEvent::CursorMoved { position, .. } => state.handle_cursor_move(position),
             _ => {}
         }
     }
@@ -368,19 +370,13 @@ impl State {
         }
     }
 
-    fn input(&mut self, event: &WindowEvent) -> bool {
-        match event {
-            WindowEvent::CursorMoved { position, .. } => {
-                self.clear_color = wgpu::Color {
-                    r: position.x as f64 / self.size.width as f64,
-                    g: position.y as f64 / self.size.height as f64,
-                    b: 1.0,
-                    a: 1.0,
-                };
-                true
-            }
-            _ => false,
-        }
+    fn handle_cursor_move(&mut self, position: PhysicalPosition<f64>) {
+        self.clear_color = wgpu::Color {
+            r: position.x as f64 / self.size.width as f64,
+            g: position.y as f64 / self.size.height as f64,
+            b: 1.0,
+            a: 1.0,
+        };
     }
 
     fn update(&mut self) {
@@ -429,12 +425,7 @@ impl State {
                     resolve_target: None,
                     depth_slice: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
-                        }),
+                        load: wgpu::LoadOp::Clear(self.clear_color),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
