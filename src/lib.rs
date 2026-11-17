@@ -4,12 +4,7 @@ mod camera;
 use std::sync::Arc;
 
 use winit::{
-        application::ApplicationHandler,
-        dpi::PhysicalPosition,
-        event::*,
-        event_loop::{ActiveEventLoop, EventLoop},
-        keyboard::{KeyCode, PhysicalKey},
-        window::Window
+        application::ApplicationHandler, dpi::PhysicalPosition, event::*, event_loop::{ActiveEventLoop, EventLoop}, keyboard::{Key, KeyCode, PhysicalKey}, window::Window
 };
 use wgpu::util::DeviceExt;
 
@@ -193,6 +188,7 @@ struct State {
     camera_uniform: camera::CameraUniform,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
+    camera_controller: camera::CameraController,
     clear_color: wgpu::Color,
     // The window must be declared after the surface so
     // it gets dropped after it as the surface contains
@@ -380,6 +376,8 @@ impl State {
             label: Some("camera_bind_group"),
         });
 
+        let camera_controller = camera::CameraController::new(0.2);
+
         let clear_color = wgpu::Color::BLACK;
 
         // create render pipeline
@@ -461,7 +459,8 @@ impl State {
             camera,
             camera_uniform,
             camera_buffer,
-            camera_bind_group
+            camera_bind_group,
+            camera_controller
         })
     }
 
@@ -479,10 +478,11 @@ impl State {
         }
     }
 
-    fn handle_key(&self, event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
-        match (code, is_pressed) {
-            (KeyCode::Escape, true) => event_loop.exit(),
-            _ => {}
+    fn handle_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
+        if code == KeyCode::Escape && is_pressed {
+            event_loop.exit();
+        } else {
+            self.camera_controller.handle_key(code, is_pressed);
         }
     }
 
@@ -496,7 +496,9 @@ impl State {
     }
 
     fn update(&mut self) {
-
+        self.camera_controller.update_camera(&mut self.camera);
+        self.camera_uniform.update_view_proj(&self.camera);
+        self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
     }
 
     fn render(&mut self) -> anyhow::Result<()> {
